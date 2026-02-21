@@ -1,6 +1,6 @@
 # Pinpoint
 
-**Pinpoint** is a low-latency assistive object-localization web API that helps you find an item in an image or webcam frame by detecting objects and returning interpretable spatial guidance (e.g., *"keys are bottom-left"*).
+**Pinpoint** is a low-latency assistive object-localization web API that helps you find an item in an image or webcam frame by detecting objects and returning interpretable spatial guidance (e.g., *"keys are bottom-left"*). 
 
 - **Who it's for:** Everyday users who misplace small items (keys, wallet, phone, remote) and want quick, explainable location guidance from a photo or webcam. Also built to demonstrate production ML systems skills.
 - **Stack:** Python 3.11, Ultralytics YOLOv8 (GPU or CPU), OpenCV, FastAPI, single-page Tailwind UI.
