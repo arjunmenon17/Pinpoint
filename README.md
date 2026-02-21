@@ -3,19 +3,21 @@
 **Pinpoint** is a low-latency assistive object-localization web API that helps you find an item in an image or webcam frame by detecting objects and returning interpretable spatial guidance (e.g., *"keys are bottom-left"*).
 
 - **Who it's for:** Everyday users who misplace small items (keys, wallet, phone, remote) and want quick, explainable location guidance from a photo or webcam. Also built to demonstrate production ML systems skills.
-- **Stack:** Python 3.11, Ultralytics YOLOv8 (CPU), OpenCV, FastAPI, single-page Tailwind UI.
+- **Stack:** Python 3.11, Ultralytics YOLOv8 (GPU or CPU), OpenCV, FastAPI, single-page Tailwind UI.
+- **Live demo:** [**https://pinpoint-21aa.onrender.com/**](https://pinpoint-21aa.onrender.com/) — try it in the browser. The deployed app runs on **CPU only**, so it is **slower and less accurate** than running locally with a GPU; see [GPU vs CPU](#gpu-vs-cpu-latency-and-accuracy) below.
 
 ## Architecture overview
 
 ```
 ┌─────────────┐     POST /detect      ┌──────────────┐     ┌─────────────┐
-│  Browser    │ ───────────────────► │  FastAPI     │ ──► │  YOLOv8n    │
-│  (static)   │   multipart image    │  app/main    │     │  detector   │
-└─────────────┘                      └──────┬───────┘     └──────┬──────┘
-       ▲                                    │                    │
-       │ JSON + base64 annotated image      │                    ▼
-       │ inference_latency_ms               │             ┌─────────────┐
-       └───────────────────────────────────┘             │  spatial     │
+│  Browser    │ ───────────────────► │  FastAPI     │ ──► │  YOLOv8     │
+│  (static)   │   multipart image    │  app/main    │     │  (GPU: x,   │
+└─────────────┘                      └──────┬───────┘     │   CPU: n)   │
+       ▲                                    │             └──────┬──────┘
+       │ JSON + base64 annotated image     │                    │
+       │ timing (infer_ms, total_ms)        │                    ▼
+       └───────────────────────────────────┘             ┌─────────────┐
+                                                         │  spatial     │
                                                          │  (regions,   │
                                                          │   direction) │
                                                          └─────────────┘
@@ -78,7 +80,23 @@ set CONF_THRESHOLD=0.25
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Open **http://localhost:8000** for the demo UI, or **http://localhost:8000/docs** for Swagger.
+Open **http://localhost:8000** for the demo UI, or **http://localhost:8000/docs** for Swagger. With a CUDA-capable GPU, the app automatically uses the larger model (YOLOv8x) and full-resolution images for best quality and still low latency.
+
+## GPU vs CPU: latency and accuracy
+
+The same codebase runs in two modes depending on hardware, with different trade-offs:
+
+| | **Local (GPU)** | **Deployed (CPU, e.g. Render)** |
+|--|-----------------|----------------------------------|
+| **Device** | CUDA | CPU only |
+| **Model** | YOLOv8x (default) — larger, more accurate | YOLOv8n — small, fast on CPU |
+| **Input** | No downscale (full resolution) | Capped (e.g. max dimension 1280 px) |
+| **Typical inference** | **~100–200 ms** | **~20–60+ s** (e.g. ~30 s) |
+| **Accuracy** | Higher (larger model + full res) | Lower (smaller model + resized input) |
+
+**Why the gap?** GPU inference uses thousands of cores in parallel and optimized CUDA kernels; CPU runs the same math on a handful of cores, so each frame takes orders of magnitude longer. The deployed [live demo](https://pinpoint-21aa.onrender.com/) runs on Render’s free-tier CPU, so you can expect roughly **30 s or more** per image. Locally, with a GPU, the same request is typically **under 200 ms**. This reflects a deliberate systems trade-off: the hosted version prioritizes cost and compatibility (no GPU required), while local runs prioritize speed and quality.
+
+You can reproduce these numbers: run the app locally with a GPU and call `POST /detect`; check the `timing.infer_ms` and `timing.total_ms` in the response. Then try the same image against the deployed API and compare.
 
 ## Run with Docker
 
@@ -141,38 +159,6 @@ pytest tests/ -v
 
 Spatial logic is covered in `tests/test_spatial.py` (regions, offsets, direction strings, distance labels).
 
-## Deploy on Render
+## Deployment
 
-The app is already containerized (Dockerfile). You can deploy it on [Render](https://render.com) as a Web Service.
-
-### Option A: Deploy from dashboard (recommended)
-
-1. Push this repo to GitHub (or GitLab).
-2. Go to [Render Dashboard](https://dashboard.render.com) → **New** → **Web Service**.
-3. Connect your repo and select the Pinpoint repository.
-4. Configure:
-   - **Name:** `pinpoint` (or any name).
-   - **Region:** choose one.
-   - **Runtime:** **Docker** (required).
-   - **Branch:** `main` (or your default).
-   - Leave **Dockerfile Path** blank (it’s in the repo root).
-5. (Optional) Under **Environment**, add:
-   - `MODEL_NAME` = `yolov8n.pt`
-   - `CONF_THRESHOLD` = `0.25`
-6. Click **Create Web Service**. Render will build the image from the Dockerfile and run it. The first deploy may take a few minutes (downloads YOLO weights).
-
-Your service URL will be like `https://pinpoint-xxxx.onrender.com`. Open it to use the demo UI; use `POST /detect` for the API.
-
-### Option B: Blueprint (render.yaml)
-
-The repo includes a `render.yaml` blueprint. After connecting the repo, you can use **New** → **Blueprint** and point Render at this repo; it will create the web service from the blueprint.
-
-### Notes
-
-- **Free tier:** The service may spin down after inactivity; the first request after idle can be slow (cold start). **Inference on Render’s free CPU is slow (often 20–60+ seconds per image)**; the button stays disabled until the response returns. Paid plans have more CPU and are faster.
-- **PORT:** The Dockerfile uses `PORT` from the environment (default 8000). Render sets `PORT` automatically; no need to set it yourself.
-- **No GPU:** The Dockerfile is CPU-only; inference runs on CPU.
-
-## License
-
-Use and modify as needed for portfolio and interviews.
+The live demo is hosted on **[Render](https://render.com)**. The app is containerized (Dockerfile, CPU-only image) and runs as a Render Web Service; Render sets `PORT` automatically. On the free tier the service may spin down when idle (cold start on first request), and inference is CPU-bound so responses are much slower than [local GPU](#gpu-vs-cpu-latency-and-accuracy)—see that section for the latency/accuracy trade-off.
