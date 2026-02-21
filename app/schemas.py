@@ -39,13 +39,29 @@ class Detection(BaseModel):
     spatial: SpatialGuidance = Field(..., description="Spatial guidance")
 
 
+class TimingBreakdown(BaseModel):
+    """Per-stage timing in milliseconds."""
+
+    decode_ms: float = Field(0.0, description="Image decode time")
+    preprocess_ms: float = Field(0.0, description="Resize/preprocess time")
+    infer_ms: float = Field(0.0, description="Model inference time")
+    post_ms: float = Field(0.0, description="Postprocess time")
+    annotate_ms: float = Field(0.0, description="Draw/encode annotated image time")
+    total_ms: float = Field(0.0, description="Total request time")
+
+
 class DetectResponse(BaseModel):
     """Response for POST /detect."""
 
     detections: list[Detection] = Field(
         default_factory=list, description="Detections (filtered/sorted per request)"
     )
-    inference_latency_ms: float = Field(..., description="Inference time in milliseconds")
+    inference_latency_ms: float = Field(
+        ..., description="Inference time in ms (same as timing.infer_ms)"
+    )
+    timing: TimingBreakdown | None = Field(
+        default=None, description="Per-stage timing breakdown"
+    )
     annotated_image_b64: str | None = Field(
         default=None, description="PNG image as base64 string"
     )

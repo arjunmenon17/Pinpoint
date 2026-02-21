@@ -35,9 +35,9 @@ Detect objects in an image and return detections with spatial guidance.
 
 | Item | Description |
 |------|-------------|
-| **Request** | `multipart/form-data` with `file` = image (JPG, PNG, WebP, BMP; max 10 MB). |
-| **Query params** | `target` (optional): class label to filter (e.g. `cell phone`). `conf` (optional): confidence threshold 0–1. `top_k` (optional): max detections when target is set (default 5). `include_annotated` (optional): include base64 PNG (default true). |
-| **Response** | JSON: `detections` (list with `label`, `confidence`, `bbox`, `spatial`), `inference_latency_ms`, `annotated_image_b64`, `target_requested`, `image_width`, `image_height`. |
+| **Request** | `multipart/form-data` with `file` = image (JPG, PNG, WebP, BMP; max size from `MAX_UPLOAD_MB`). |
+| **Query params** | `target` (optional): class label to filter. `conf` (optional): confidence override 0–1. `top_k` (default 5): max detections when target set. `annotate` (default 1): 1 = include base64 annotated image, 0 = JSON only (faster). `imgsz` (optional): inference size override (160–1920). |
+| **Response** | JSON: `detections`, `inference_latency_ms`, `timing` (decode_ms, preprocess_ms, infer_ms, post_ms, annotate_ms, total_ms), `annotated_image_b64` (if annotate=1), `target_requested`, `image_width`, `image_height`. |
 
 **Selection logic:**
 
@@ -51,7 +51,7 @@ Serves the demo UI (single-page at `static/index.html`).
 
 ### `GET /health`
 
-Health check; returns `{"status": "ok"}`.
+Health check; returns `status`, `device` (cuda/cpu), `model` (model filename), and `preset` (gpu/cpu).
 
 ## Run locally
 
@@ -69,8 +69,9 @@ python -m venv .venv
 # Install
 pip install -r requirements.txt
 
-# Optional env
+# Optional env (see Configuration below)
 set MODEL_NAME=yolov8n.pt
+set MODEL_DEVICE=auto
 set CONF_THRESHOLD=0.25
 
 # Run (first run downloads YOLO weights)
@@ -113,10 +114,10 @@ curl -X POST "http://localhost:8000/detect?target=cell%20phone&conf=0.3" \
   -F "file=@/path/to/photo.jpg"
 ```
 
-**Without annotated image:**
+**JSON only (faster, no annotated image):**
 
 ```bash
-curl -X POST "http://localhost:8000/detect?include_annotated=false" \
+curl -X POST "http://localhost:8000/detect?annotate=0" \
   -F "file=@/path/to/photo.jpg"
 ```
 
@@ -163,7 +164,7 @@ The repo includes a `render.yaml` blueprint. After connecting the repo, you can 
 
 ### Notes
 
-- **Free tier:** The service may spin down after inactivity; the first request after idle can be slow (cold start).
+- **Free tier:** The service may spin down after inactivity; the first request after idle can be slow (cold start). **Inference on Render’s free CPU is slow (often 20–60+ seconds per image)**; the button stays disabled until the response returns. Paid plans have more CPU and are faster.
 - **PORT:** The Dockerfile uses `PORT` from the environment (default 8000). Render sets `PORT` automatically; no need to set it yourself.
 - **No GPU:** The Dockerfile is CPU-only; inference runs on CPU.
 

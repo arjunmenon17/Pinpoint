@@ -19,7 +19,15 @@ logger = logging.getLogger(__name__)
 
 # Allowed MIME / extensions
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
-MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def get_max_upload_bytes() -> int:
+    """Max upload size from MAX_UPLOAD_MB env (default 8)."""
+    try:
+        from app.config import MAX_UPLOAD_MB
+        return MAX_UPLOAD_MB * 1024 * 1024
+    except Exception:
+        return 8 * 1024 * 1024
 
 
 def decode_image_from_bytes(data: bytes) -> NDArray[np.uint8]:
@@ -43,6 +51,19 @@ def decode_image_from_bytes(data: bytes) -> NDArray[np.uint8]:
     return img
 
 
+def resize_to_max_dim(img: NDArray[np.uint8], max_dim: int) -> NDArray[np.uint8]:
+    """Downscale so the longest side is at most max_dim. Returns new image."""
+    if max_dim <= 0:
+        return img
+    h, w = img.shape[:2]
+    if max(h, w) <= max_dim:
+        return img
+    scale = max_dim / max(h, w)
+    new_w = int(round(w * scale))
+    new_h = int(round(h * scale))
+    return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
 def encode_image_to_png_b64(img: NDArray[np.uint8]) -> str:
     """Encode BGR image to base64 PNG string."""
     ok, buf = cv2.imencode(".png", img)
@@ -60,9 +81,10 @@ def validate_file_upload(
     """
     if not content:
         raise ValueError("No file content")
-    if len(content) > MAX_FILE_SIZE_BYTES:
+    max_bytes = get_max_upload_bytes()
+    if len(content) > max_bytes:
         raise ValueError(
-            f"File too large (max {MAX_FILE_SIZE_BYTES // (1024*1024)} MB)"
+            f"File too large (max {max_bytes // (1024*1024)} MB)"
         )
     name = (filename or "image").strip()
     if not name:

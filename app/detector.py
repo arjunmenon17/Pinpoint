@@ -1,17 +1,25 @@
-"""YOLO model loading and inference."""
+"""YOLO model loading and inference with device-aware presets and timing."""
 
 from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from typing import TYPE_CHECKING
 
 from ultralytics import YOLO
 
+from app.config import (
+    CONF_THRESHOLD,
+    get_imgsz,
+    get_max_dim,
+    get_preset_name,
+    resolve_device,
+)
 from app.schemas import Detection, SpatialGuidance
 from app.spatial import compute_spatial_guidance
-from app.utils import decode_image_from_bytes
+from app.utils import resize_to_max_dim
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -19,17 +27,60 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _model: YOLO | None = None
+_device: str | None = None
+
+# Limit concurrent CPU inference to avoid pileups (1 = single-threaded inference)
+_CPU_SEMAPHORE = threading.Semaphore(1)
+
+
+def _get_device() -> str:
+    global _device
+    if _device is None:
+        _device = resolve_device()
+        if os.environ.get("MODEL_DEVICE", "auto").strip().lower() == "cuda" and _device == "cpu":
+            logger.warning("MODEL_DEVICE=cuda but CUDA not available; falling back to CPU")
+    return _device
 
 
 def get_model() -> YOLO:
-    """Load YOLO model once (singleton)."""
+    """Load YOLO model once (singleton) on the resolved device."""
     global _model
     if _model is None:
         model_name = os.environ.get("MODEL_NAME", "yolov8n.pt")
-        logger.info("Loading YOLO model: %s", model_name)
+        device = _get_device()
+        logger.info("Loading YOLO model: %s on device=%s", model_name, device)
         _model = YOLO(model_name)
-        logger.info("Model loaded")
+        logger.info("Model loaded | device=%s | preset=%s", device, get_preset_name(device))
     return _model
+
+
+def get_device() -> str:
+    """Return the resolved device (cuda or cpu). Ensures model is loaded."""
+    get_model()
+    return _get_device()
+
+
+def warmup() -> None:
+    """Run one tiny dummy inference to avoid first-request spike. Safe on CPU."""
+    try:
+        import numpy as np
+        model = get_model()
+        device = _get_device()
+        # Tiny BGR image (64x64) to avoid OOM and keep CPU fast
+        dummy = np.zeros((64, 64, 3), dtype=np.uint8)
+        imgsz = get_imgsz(device)
+        half = device == "cuda"
+        model.predict(
+            dummy,
+            conf=CONF_THRESHOLD,
+            verbose=False,
+            device=device,
+            imgsz=min(imgsz, 128),
+            half=half,
+        )
+        logger.info("Model warmup done (device=%s)", device)
+    except Exception as e:
+        logger.warning("Model warmup failed (non-fatal): %s", e)
 
 
 def run_detection(
@@ -37,48 +88,67 @@ def run_detection(
     conf_threshold: float,
     target_label: str | None,
     top_k: int = 5,
-) -> tuple[list[Detection], float]:
+    imgsz_override: int | None = None,
+) -> tuple[list[Detection], dict]:
     """
     Run YOLO inference and build list of Detection with spatial guidance.
-    Returns (detections, inference_latency_ms).
-    Selection:
-      - If target_label: best match (highest conf) for that class, then top-k if multiple.
-      - If no target: all detections above conf_threshold, sorted by confidence.
+    Returns (detections, timing_dict) with keys: preprocess_ms, infer_ms, post_ms.
     """
     model = get_model()
+    device = _get_device()
+    imgsz = imgsz_override if imgsz_override is not None else get_imgsz(device)
+    imgsz = max(160, min(1920, imgsz))  # clamp for safety
+    max_dim = get_max_dim(device)
+    half = device == "cuda"
+
+    # Preprocess: downscale if over max_dim
+    t_pre = time.perf_counter()
+    if max(image_bgr.shape[:2]) > max_dim:
+        image_bgr = resize_to_max_dim(image_bgr, max_dim)
+    preprocess_ms = (time.perf_counter() - t_pre) * 1000.0
+
     h, w = image_bgr.shape[:2]
     image_area = h * w
 
-    t0 = time.perf_counter()
-    results = model.predict(
-        image_bgr,
-        conf=conf_threshold,
-        verbose=False,
-        device="cpu",
-    )
-    latency_ms = (time.perf_counter() - t0) * 1000.0
+    # Inference (optionally limit concurrency on CPU)
+    if device == "cpu":
+        _CPU_SEMAPHORE.acquire()
+    try:
+        t_infer = time.perf_counter()
+        results = model.predict(
+            image_bgr,
+            conf=conf_threshold,
+            verbose=False,
+            device=device,
+            imgsz=imgsz,
+            half=half,
+        )
+        infer_ms = (time.perf_counter() - t_infer) * 1000.0
+    finally:
+        if device == "cpu":
+            _CPU_SEMAPHORE.release()
 
+    t_post = time.perf_counter()
     detections: list[Detection] = []
     if not results:
-        return detections, latency_ms
+        post_ms = (time.perf_counter() - t_post) * 1000.0
+        return detections, {"preprocess_ms": preprocess_ms, "infer_ms": infer_ms, "post_ms": post_ms}
 
     r = results[0]
     if r.boxes is None or len(r.boxes) == 0:
-        return detections, latency_ms
+        post_ms = (time.perf_counter() - t_post) * 1000.0
+        return detections, {"preprocess_ms": preprocess_ms, "infer_ms": infer_ms, "post_ms": post_ms}
 
-    # Collect all above threshold with spatial info
     names = model.names
     boxes = r.boxes.xyxy.cpu().numpy()
     confs = r.boxes.conf.cpu().numpy()
     cls_ids = r.boxes.cls.cpu().numpy().astype(int)
 
-    # Area percentiles: we need all areas first to compute percentile
     areas = []
     for (x1, y1, x2, y2) in boxes:
         area = (x2 - x1) * (y2 - y1)
         pct = (area / image_area) * 100.0 if image_area > 0 else 0.0
         areas.append(pct)
-    # Simple percentile: rank among these detections (0–100)
     sorted_areas = sorted(areas)
     n_a = len(sorted_areas)
     area_percentiles = []
@@ -109,14 +179,12 @@ def run_detection(
             detections.append(det)
         elif label.lower() == target_lower:
             detections.append(det)
-        # else skip (we only want target class when target is set)
 
-    # Sort by confidence descending
     detections.sort(key=lambda d: d.confidence, reverse=True)
-
     if target_lower is not None:
         detections = detections[:top_k]
     else:
-        detections = detections[: max(top_k, 50)]  # cap when returning all
+        detections = detections[: max(top_k, 50)]
 
-    return detections, latency_ms
+    post_ms = (time.perf_counter() - t_post) * 1000.0
+    return detections, {"preprocess_ms": preprocess_ms, "infer_ms": infer_ms, "post_ms": post_ms}

@@ -114,7 +114,18 @@
         <section class="rounded-2xl border border-cyan-200/70 bg-white/80 shadow-xl shadow-cyan-900/5 overflow-hidden mb-6 lg:mb-0 backdrop-blur-sm">
         <div class="p-5 sm:p-6 border-b border-cyan-100 bg-gradient-to-r from-cyan-50/80 to-teal-50/50">
           <h2 class="text-sm font-semibold text-slate-800 mb-0.5">Your image</h2>
-          <p class="text-xs text-slate-500">JPG, PNG, WebP or BMP · max 10 MB</p>
+          <p class="text-xs text-slate-500">JPG, PNG, WebP or BMP · max 8 MB</p>
+        </div>
+        <!-- Captured/selected image preview -->
+        <div id="previewPanel" class="hidden mx-4 mt-4 rounded-xl border border-cyan-200/70 bg-cyan-50/50 overflow-hidden">
+          <div class="px-4 py-2 border-b border-cyan-200/60 flex items-center justify-between flex-wrap gap-2">
+            <span id="previewStatus" class="text-sm font-medium text-cyan-800">Image selected</span>
+            <span id="previewTime" class="text-xs text-slate-500 tabular-nums">—</span>
+            <button type="button" id="retakeBtn" class="text-sm font-medium text-cyan-600 hover:text-cyan-800 px-2 py-1 rounded-lg hover:bg-cyan-100 transition-colors">Retake / Clear</button>
+          </div>
+          <div class="p-2 flex justify-center bg-slate-100/50">
+            <img id="capturedPreviewImg" alt="Captured or selected image" class="max-h-64 w-auto object-contain rounded-lg shadow-sm" />
+          </div>
         </div>
         <div
           id="dropzone"
@@ -158,9 +169,12 @@
           <button
             id="detectBtn"
             disabled
-            class="w-full sm:w-auto sm:min-w-[140px] py-3 px-5 rounded-xl font-semibold bg-gradient-to-r from-cyan-500 to-teal-500 text-white hover:from-cyan-600 hover:to-teal-600 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-cyan-500 disabled:hover:to-teal-500 transition-all shadow-lg shadow-cyan-500/25"
+            class="w-full sm:w-auto sm:min-w-[160px] py-3 px-5 rounded-xl font-semibold bg-gradient-to-r from-cyan-500 to-teal-500 text-white hover:from-cyan-600 hover:to-teal-600 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-cyan-500 disabled:hover:to-teal-500 transition-all shadow-lg shadow-cyan-500/25 flex items-center justify-center gap-2"
           >
-            Find objects
+            <span id="detectBtnText">Analyze Image</span>
+            <span id="detectBtnSpinner" class="hidden">
+              <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </span>
           </button>
         </div>
       </section>
@@ -189,9 +203,12 @@
 
       <!-- Results -->
       <section id="resultsSection" class="hidden rounded-2xl border border-cyan-200/70 bg-white/80 shadow-xl shadow-cyan-900/5 overflow-hidden backdrop-blur-sm">
-        <div class="p-5 sm:p-6 border-b border-cyan-100 bg-gradient-to-r from-cyan-50/80 to-teal-50/50 flex items-center justify-between">
+        <div class="p-5 sm:p-6 border-b border-cyan-100 bg-gradient-to-r from-cyan-50/80 to-teal-50/50 flex items-center justify-between flex-wrap gap-2">
           <h2 class="text-sm font-semibold text-slate-800">Results</h2>
-          <span id="latencyBadge" class="text-xs font-medium text-cyan-700 bg-cyan-100 px-2.5 py-1 rounded-lg tabular-nums">— ms</span>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span id="latencyBadge" class="text-xs font-medium text-cyan-700 bg-cyan-100 px-2.5 py-1 rounded-lg tabular-nums">— ms</span>
+            <span id="inferLatencyBadge" class="text-xs text-slate-500 tabular-nums">infer: — ms</span>
+          </div>
         </div>
         <div class="p-5 sm:p-6">
           <div class="grid sm:grid-cols-2 gap-6">
@@ -213,9 +230,9 @@
                 <div id="classesList" class="hidden mt-2 text-slate-600 text-xs max-h-28 overflow-y-auto"></div>
               </div>
             </div>
-            <div>
-              <p class="text-xs font-medium text-cyan-700 uppercase tracking-wider mb-2">Annotated image</p>
-              <div id="previewWrap" class="rounded-xl border border-cyan-200/60 overflow-hidden bg-cyan-50/50">
+            <div class="space-y-4">
+              <div id="annotatedWrap" class="rounded-xl border border-cyan-200/60 overflow-hidden bg-cyan-50/50">
+                <p class="text-xs font-medium text-cyan-700 uppercase tracking-wider mb-2 px-2 pt-2">Annotated image</p>
                 <img id="previewImg" alt="Annotated result" class="w-full h-auto max-h-72 object-contain" />
               </div>
             </div>
@@ -253,6 +270,8 @@
     var toggleClassesLabel = document.getElementById('toggleClassesLabel');
 
     var selectedFile = null;
+    var previewObjectUrl = null;
+    var imageSourceType = null;
     var cameraStream = null;
     // COCO 80 classes (YOLO order) for "Show all 80" toggle
     var COCO_CLASSES = ['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign','parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie','suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle','wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven','toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
@@ -264,6 +283,15 @@
     const cameraCancelBtn = document.getElementById('cameraCancelBtn');
     const cameraCancelBtn2 = document.getElementById('cameraCancelBtn2');
     const cameraCaptureBtn = document.getElementById('cameraCaptureBtn');
+    const previewPanel = document.getElementById('previewPanel');
+    const capturedPreviewImg = document.getElementById('capturedPreviewImg');
+    const previewStatus = document.getElementById('previewStatus');
+    const previewTime = document.getElementById('previewTime');
+    const retakeBtn = document.getElementById('retakeBtn');
+    const detectBtnText = document.getElementById('detectBtnText');
+    const detectBtnSpinner = document.getElementById('detectBtnSpinner');
+    const annotatedWrap = document.getElementById('annotatedWrap');
+    const inferLatencyBadge = document.getElementById('inferLatencyBadge');
 
     function bindTagClicks() {
       var tags = document.querySelectorAll('#detectableTags .detectable-tag');
@@ -306,6 +334,41 @@
       if (cameraModal) cameraModal.classList.add('hidden');
     }
 
+    function setPreviewFromFile(file, sourceType) {
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = null;
+      }
+      selectedFile = file;
+      imageSourceType = sourceType;
+      if (!file) {
+        if (previewPanel) previewPanel.classList.add('hidden');
+        if (detectBtn) detectBtn.disabled = true;
+        return;
+      }
+      previewObjectUrl = URL.createObjectURL(file);
+      if (capturedPreviewImg) capturedPreviewImg.src = previewObjectUrl;
+      if (previewStatus) previewStatus.textContent = sourceType === 'capture' ? 'Image captured' : 'Image selected';
+      if (previewTime) previewTime.textContent = new Date().toLocaleTimeString();
+      if (previewPanel) previewPanel.classList.remove('hidden');
+      if (detectBtn) detectBtn.disabled = false;
+      hideError();
+    }
+
+    function clearPreview() {
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = null;
+      }
+      selectedFile = null;
+      imageSourceType = null;
+      if (fileInput) fileInput.value = '';
+      if (previewPanel) previewPanel.classList.add('hidden');
+      if (capturedPreviewImg) capturedPreviewImg.removeAttribute('src');
+      if (detectBtn) detectBtn.disabled = true;
+      hideError();
+    }
+
     // --- Dropzone and file input first so they always work ---
     if (dropzone && fileInput) {
       dropzone.addEventListener('click', function (e) {
@@ -325,9 +388,7 @@
         dropzone.setAttribute('data-dragover', 'false');
         var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
         if (f && f.type.indexOf('image/') === 0) {
-          selectedFile = f;
-          if (detectBtn) detectBtn.disabled = false;
-          hideError();
+          setPreviewFromFile(f, 'upload');
         }
       });
     }
@@ -336,9 +397,16 @@
       fileInput.addEventListener('change', function () {
         var f = fileInput.files && fileInput.files[0];
         if (f) {
-          selectedFile = f;
-          if (detectBtn) detectBtn.disabled = false;
-          hideError();
+          setPreviewFromFile(f, 'upload');
+        }
+      });
+    }
+
+    if (retakeBtn) {
+      retakeBtn.addEventListener('click', function () {
+        clearPreview();
+        if (cameraModal && !cameraModal.classList.contains('hidden')) {
+          closeCamera();
         }
       });
     }
@@ -371,9 +439,8 @@
         canvas.getContext('2d').drawImage(cameraVideo, 0, 0);
         canvas.toBlob(function (blob) {
           if (!blob) return;
-          selectedFile = new File([blob], 'camera.png', { type: 'image/png' });
-          if (detectBtn) detectBtn.disabled = false;
-          hideError();
+          var file = new File([blob], 'camera.png', { type: 'image/png' });
+          setPreviewFromFile(file, 'capture');
           closeCamera();
         }, 'image/png');
       });
@@ -396,15 +463,19 @@
       if (!selectedFile) return;
       hideError();
       detectBtn.disabled = true;
+      if (detectBtnText) detectBtnText.textContent = 'Analyzing…';
+      if (detectBtnSpinner) detectBtnSpinner.classList.remove('hidden');
+      if (fileInput) fileInput.disabled = true;
+      if (takePhotoBtn) takePhotoBtn.style.pointerEvents = 'none';
 
       var formData = new FormData();
       formData.append('file', selectedFile);
-      var conf = confSlider.value;
-      var target = targetInput.value.trim() || undefined;
+      var conf = confSlider ? confSlider.value : '0.25';
+      var target = targetInput && targetInput.value ? targetInput.value.trim() : undefined;
       var params = new URLSearchParams();
       if (conf) params.set('conf', conf);
       if (target) params.set('target', target);
-      params.set('include_annotated', 'true');
+      params.set('annotate', '1');
 
       var url = '/detect?' + params.toString();
       try {
@@ -412,13 +483,17 @@
         var data = await res.json();
 
         if (!res.ok) {
-          showError(data.detail || res.statusText || 'Request failed');
-          detectBtn.disabled = false;
+          var errMsg = typeof data.detail === 'string' ? data.detail : (Array.isArray(data.detail) && data.detail[0] && data.detail[0].msg ? data.detail[0].msg : null);
+          showError(errMsg || res.statusText || 'Request failed');
           return;
         }
 
         resultsSection.classList.remove('hidden');
-        latencyBadge.textContent = (data.inference_latency_ms ?? 0).toFixed(0) + ' ms';
+        var timing = data.timing || {};
+        var totalMs = timing.total_ms != null ? timing.total_ms : (data.inference_latency_ms != null ? data.inference_latency_ms : 0);
+        var inferMs = timing.infer_ms != null ? timing.infer_ms : (data.inference_latency_ms != null ? data.inference_latency_ms : 0);
+        if (latencyBadge) latencyBadge.textContent = totalMs.toFixed(0) + ' ms total';
+        if (inferLatencyBadge) inferLatencyBadge.textContent = 'infer: ' + inferMs.toFixed(0) + ' ms';
 
         var dets = data.detections || [];
         if (dets.length > 0) {
@@ -427,7 +502,7 @@
           directionString.textContent = top.spatial && top.spatial.direction_string ? top.spatial.direction_string : '—';
           topConf.textContent = 'Confidence: ' + (top.confidence * 100).toFixed(1) + '%';
           allDetections.innerHTML = dets.slice(0, 12).map(function (d, i) {
-            return '<div class="flex justify-between gap-2"><span>' + (i + 1) + '. ' + d.label + '</span><span class="tabular-nums text-surface-500">' + (d.confidence * 100).toFixed(0) + '%</span></div>';
+            return '<div class="flex justify-between gap-2"><span>' + (i + 1) + '. ' + d.label + '</span><span class="tabular-nums text-slate-500">' + (d.confidence * 100).toFixed(0) + '%</span></div>';
           }).join('');
         } else {
           topLabel.textContent = data.target_requested ? 'No match' : 'No detections';
@@ -440,42 +515,51 @@
 
         var hint = document.getElementById('noMatchHint');
         var classesList = document.getElementById('classesList');
-        if (data.target_requested && dets.length === 0) {
+        if (data.target_requested && dets.length === 0 && hint) {
           hint.classList.remove('hidden');
-          document.getElementById('noMatchHintText').textContent =
+          var noMatchHintText = document.getElementById('noMatchHintText');
+          if (noMatchHintText) noMatchHintText.textContent =
             '"' + data.target_requested + '" is not one of the 80 COCO classes we detect. Use a label from the list above or leave target empty.';
-          classesList.classList.add('hidden');
-        } else {
+          if (classesList) classesList.classList.add('hidden');
+        } else if (hint) {
           hint.classList.add('hidden');
         }
 
-        if (data.annotated_image_b64) {
+        if (data.annotated_image_b64 && previewImg) {
           previewImg.src = 'data:image/png;base64,' + data.annotated_image_b64;
-          previewImg.classList.remove('hidden');
+          if (annotatedWrap) annotatedWrap.classList.remove('hidden');
         } else {
-          previewImg.classList.add('hidden');
+          if (annotatedWrap) annotatedWrap.classList.add('hidden');
         }
 
-        document.getElementById('showClassesBtn').onclick = async function () {
-          var listEl = document.getElementById('classesList');
-          if (listEl.classList.contains('hidden')) {
-            try {
-              var r = await fetch('/classes');
-              var d = await r.json();
-              listEl.textContent = (d.classes || []).join(', ');
-              listEl.classList.remove('hidden');
-            } catch (_) {
-              listEl.textContent = 'Could not load list.';
-              listEl.classList.remove('hidden');
+        var showClassesBtn = document.getElementById('showClassesBtn');
+        if (showClassesBtn) {
+          showClassesBtn.onclick = async function () {
+            var listEl = document.getElementById('classesList');
+            if (!listEl) return;
+            if (listEl.classList.contains('hidden')) {
+              try {
+                var r = await fetch('/classes');
+                var d = await r.json();
+                listEl.textContent = (d.classes || []).join(', ');
+                listEl.classList.remove('hidden');
+              } catch (_) {
+                listEl.textContent = 'Could not load list.';
+                listEl.classList.remove('hidden');
+              }
+            } else {
+              listEl.classList.add('hidden');
             }
-          } else {
-            listEl.classList.add('hidden');
-          }
-        };
+          };
+        }
       } catch (err) {
         showError(err.message || 'Network error');
       }
-      detectBtn.disabled = false;
+      detectBtn.disabled = !selectedFile;
+      if (detectBtnText) detectBtnText.textContent = 'Analyze Image';
+      if (detectBtnSpinner) detectBtnSpinner.classList.add('hidden');
+      if (fileInput) fileInput.disabled = false;
+      if (takePhotoBtn) takePhotoBtn.style.pointerEvents = '';
     });
 
     });
