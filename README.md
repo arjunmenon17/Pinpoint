@@ -135,6 +135,38 @@ pytest tests/ -v
 
 Spatial logic is covered in `tests/test_spatial.py` (regions, offsets, direction strings, distance labels).
 
+## Deploy on Render
+
+The app is already containerized (Dockerfile). You can deploy it on [Render](https://render.com) as a Web Service.
+
+### Option A: Deploy from dashboard (recommended)
+
+1. Push this repo to GitHub (or GitLab).
+2. Go to [Render Dashboard](https://dashboard.render.com) → **New** → **Web Service**.
+3. Connect your repo and select the Pinpoint repository.
+4. Configure:
+   - **Name:** `pinpoint` (or any name).
+   - **Region:** choose one.
+   - **Runtime:** **Docker** (required).
+   - **Branch:** `main` (or your default).
+   - Leave **Dockerfile Path** blank (it’s in the repo root).
+5. (Optional) Under **Environment**, add:
+   - `MODEL_NAME` = `yolov8n.pt`
+   - `CONF_THRESHOLD` = `0.25`
+6. Click **Create Web Service**. Render will build the image from the Dockerfile and run it. The first deploy may take a few minutes (downloads YOLO weights).
+
+Your service URL will be like `https://pinpoint-xxxx.onrender.com`. Open it to use the demo UI; use `POST /detect` for the API.
+
+### Option B: Blueprint (render.yaml)
+
+The repo includes a `render.yaml` blueprint. After connecting the repo, you can use **New** → **Blueprint** and point Render at this repo; it will create the web service from the blueprint.
+
+### Notes
+
+- **Free tier:** The service may spin down after inactivity; the first request after idle can be slow (cold start).
+- **PORT:** The Dockerfile uses `PORT` from the environment (default 8000). Render sets `PORT` automatically; no need to set it yourself.
+- **No GPU:** The Dockerfile is CPU-only; inference runs on CPU.
+
 ## License
 
 Use and modify as needed for portfolio and interviews.

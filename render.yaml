@@ -1,0 +1,15 @@
+# Render Blueprint: Pinpoint API
+# Connect this repo in Render and use this file for one-service deploy.
+
+services:
+  - type: web
+    name: pinpoint
+    runtime: docker
+    plan: free
+
+    # Optional: set PORT so the app listens where Render expects (Render may set this automatically)
+    envVars:
+      - key: MODEL_NAME
+        value: yolov8n.pt
+      - key: CONF_THRESHOLD
+        value: "0.25"
