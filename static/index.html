@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pinpoint – Find objects in any image</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['DM Sans', 'system-ui', 'sans-serif'] },
+          colors: {
+            accent: {
+              50: '#ecfeff', 100: '#cffafe', 200: '#a5f3fc', 300: '#67e8f9',
+              400: '#22d3ee', 500: '#06b6d4', 600: '#0891b2', 700: '#0e7490', 800: '#155e75', 900: '#164e63'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    [data-dragover="true"] {
+      border-color: #22d3ee;
+      background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+      box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2);
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(to right, #a5f3fc, #e0f2fe);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #06b6d4, #0891b2);
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(6, 182, 212, 0.4);
+    }
+    .detectable-tag { transition: all 0.2s ease; }
+    .detectable-tag:hover { background: #a5f3fc; color: #155e75; transform: translateY(-1px); }
+  </style>
+</head>
+<body class="font-sans antialiased min-h-screen bg-gradient-to-br from-cyan-50 via-teal-50/30 to-sky-50 text-slate-800">
+  <div class="min-h-screen flex flex-col">
+    <!-- Header: centered, larger -->
+    <header class="sticky top-0 z-40 border-b border-cyan-200/60 bg-cyan-50/95 backdrop-blur-md">
+      <div class="max-w-3xl mx-auto px-4 py-6 sm:py-7 relative flex items-center justify-center min-h-[4.5rem]">
+        <a href="/" class="flex items-center gap-4 no-underline text-inherit">
+          <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/30 flex-shrink-0">
+            <svg class="w-6 h-6 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+          <div class="text-center">
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">Pinpoint</h1>
+            <p class="text-sm sm:text-base text-cyan-700/90 mt-0.5">Find objects in any image</p>
+          </div>
+        </a>
+        <a href="/docs" class="absolute right-4 top-1/2 -translate-y-1/2 text-sm sm:text-base font-medium text-cyan-700 hover:text-cyan-800 py-2 px-4 rounded-xl hover:bg-cyan-100/80 transition-colors">API docs</a>
+      </div>
+    </header>
+
+    <main class="flex-1 max-w-5xl w-full mx-auto px-4 py-8 sm:py-10">
+      <!-- Two columns: left = intro + what we detect, right = your image card -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
+        <!-- Left: description + detectable classes -->
+        <div class="space-y-5">
+          <div>
+            <p class="text-slate-600 text-lg leading-relaxed">
+              Upload a photo or take one with your camera. We'll find objects and tell you <strong class="text-cyan-800">where they are</strong> in the frame—e.g. "cell phone is bottom-right."
+            </p>
+          </div>
+          <section class="p-5 rounded-2xl bg-white/80 border border-cyan-200/60 shadow-md backdrop-blur-sm">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <h2 class="text-base font-semibold text-slate-800">What the model can detect</h2>
+              <button type="button" id="toggleClassesBtn" class="text-sm font-medium text-cyan-600 hover:text-cyan-700 px-3 py-1.5 rounded-lg hover:bg-cyan-100 transition-colors">
+                <span id="toggleClassesLabel">Show all 80</span>
+              </button>
+            </div>
+            <div id="detectableTags" class="flex flex-wrap gap-2 text-sm">
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="person">person</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="bicycle">bicycle</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="car">car</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="cell phone">cell phone</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="laptop">laptop</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="remote">remote</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="bottle">bottle</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="cup">cup</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="book">book</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="chair">chair</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="couch">couch</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="tv">tv</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="keyboard">keyboard</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="mouse">mouse</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="clock">clock</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="vase">vase</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="backpack">backpack</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="handbag">handbag</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="teddy bear">teddy bear</span>
+              <span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="toothbrush">toothbrush</span>
+            </div>
+            <p class="mt-3 text-sm text-slate-500">Click a tag to use it as the target object, or leave the field empty to see all detections.</p>
+          </section>
+        </div>
+
+        <!-- Right: Your image card -->
+        <section class="rounded-2xl border border-cyan-200/70 bg-white/80 shadow-xl shadow-cyan-900/5 overflow-hidden mb-6 lg:mb-0 backdrop-blur-sm">
+        <div class="p-5 sm:p-6 border-b border-cyan-100 bg-gradient-to-r from-cyan-50/80 to-teal-50/50">
+          <h2 class="text-sm font-semibold text-slate-800 mb-0.5">Your image</h2>
+          <p class="text-xs text-slate-500">JPG, PNG, WebP or BMP · max 10 MB</p>
+        </div>
+        <div
+          id="dropzone"
+          data-dragover="false"
+          class="mx-4 mt-4 mb-4 border-2 border-dashed border-cyan-200 rounded-xl p-8 sm:p-10 text-center transition-all cursor-pointer hover:border-cyan-400 hover:bg-cyan-50/60"
+        >
+          <input type="file" id="fileInput" accept="image/*" class="hidden" />
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-cyan-100 to-teal-100 flex items-center justify-center text-cyan-600 mb-4">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          </div>
+          <p class="text-slate-700 font-medium">Drop an image here or <span class="text-cyan-600 font-semibold">browse</span></p>
+          <p class="mt-2">
+            <button type="button" id="takePhotoBtn" class="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-cyan-600 font-medium">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 13v7a2 2 0 01-2 2H7a2 2 0 01-2-2v-7"/></svg>
+              Or take a photo
+            </button>
+          </p>
+        </div>
+
+        <!-- Options -->
+        <div class="px-5 sm:px-6 pb-5 sm:pb-6 space-y-4">
+          <div>
+            <label for="targetInput" class="block text-sm font-medium text-slate-700 mb-1.5">Target object <span class="text-slate-400 font-normal">(optional)</span></label>
+            <input
+              type="text"
+              id="targetInput"
+              placeholder="e.g. cell phone, remote, bottle"
+              class="w-full rounded-xl border border-cyan-200 px-4 py-2.5 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-cyan-400/40 focus:border-cyan-500 outline-none transition-all"
+            />
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-1.5">
+              <label for="confSlider" class="text-sm font-medium text-slate-700">Confidence threshold</label>
+              <span id="confValue" class="text-sm tabular-nums text-cyan-700 font-medium">0.25</span>
+            </div>
+            <input type="range" id="confSlider" min="0.05" max="0.95" step="0.05" value="0.25" class="w-full" />
+          </div>
+        </div>
+
+        <div class="px-5 sm:px-6 pb-5 sm:pb-6">
+          <button
+            id="detectBtn"
+            disabled
+            class="w-full sm:w-auto sm:min-w-[140px] py-3 px-5 rounded-xl font-semibold bg-gradient-to-r from-cyan-500 to-teal-500 text-white hover:from-cyan-600 hover:to-teal-600 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:from-cyan-500 disabled:hover:to-teal-500 transition-all shadow-lg shadow-cyan-500/25"
+          >
+            Find objects
+          </button>
+        </div>
+      </section>
+      </div>
+      <!-- /two columns -->
+
+      <!-- Camera modal -->
+      <div id="cameraModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" aria-modal="true">
+        <div class="rounded-2xl border border-cyan-200/50 bg-white shadow-2xl max-w-lg w-full overflow-hidden">
+          <div class="p-4 border-b border-cyan-100 bg-cyan-50/80 flex justify-between items-center">
+            <h3 class="font-semibold text-slate-800">Take a photo</h3>
+            <button type="button" id="cameraCancelBtn" class="p-2 rounded-xl text-slate-500 hover:bg-cyan-100 hover:text-cyan-800" aria-label="Close">✕</button>
+          </div>
+          <div class="p-4 bg-slate-800">
+            <video id="cameraVideo" autoplay playsinline muted class="w-full aspect-video object-cover rounded-xl bg-black"></video>
+          </div>
+          <div class="p-4 flex justify-center gap-3 bg-white">
+            <button type="button" id="cameraCancelBtn2" class="px-4 py-2.5 rounded-xl border border-cyan-200 text-slate-700 hover:bg-cyan-50 font-medium">Cancel</button>
+            <button type="button" id="cameraCaptureBtn" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 text-white font-semibold hover:from-cyan-600 hover:to-teal-600 shadow-lg shadow-cyan-500/25">Capture</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div id="errorBox" class="hidden rounded-xl bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-sm mb-6"></div>
+
+      <!-- Results -->
+      <section id="resultsSection" class="hidden rounded-2xl border border-cyan-200/70 bg-white/80 shadow-xl shadow-cyan-900/5 overflow-hidden backdrop-blur-sm">
+        <div class="p-5 sm:p-6 border-b border-cyan-100 bg-gradient-to-r from-cyan-50/80 to-teal-50/50 flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-slate-800">Results</h2>
+          <span id="latencyBadge" class="text-xs font-medium text-cyan-700 bg-cyan-100 px-2.5 py-1 rounded-lg tabular-nums">— ms</span>
+        </div>
+        <div class="p-5 sm:p-6">
+          <div class="grid sm:grid-cols-2 gap-6">
+            <div class="space-y-4">
+              <div id="summaryCard" class="rounded-xl bg-gradient-to-br from-cyan-50 to-teal-50/50 border border-cyan-200/60 p-4">
+                <p class="text-xs font-medium text-cyan-700 uppercase tracking-wider mb-2">Top detection</p>
+                <p id="topLabel" class="text-lg font-bold text-slate-800">—</p>
+                <p id="directionString" class="mt-2 text-cyan-700 font-medium leading-snug">—</p>
+                <p id="topConf" class="mt-2 text-sm text-slate-500">Confidence: —</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium text-cyan-700 uppercase tracking-wider mb-2">All detections</p>
+                <div id="allDetections" class="text-sm text-slate-600 space-y-1.5 max-h-36 overflow-y-auto"></div>
+              </div>
+              <div id="noMatchHint" class="hidden p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                <p class="font-semibold">Not in the model's vocabulary</p>
+                <p id="noMatchHintText" class="mt-1 text-amber-800/90">This object is not one of the 80 COCO classes we detect.</p>
+                <button type="button" id="showClassesBtn" class="mt-2 text-cyan-600 hover:text-cyan-700 font-medium text-sm">Show all detectable objects</button>
+                <div id="classesList" class="hidden mt-2 text-slate-600 text-xs max-h-28 overflow-y-auto"></div>
+              </div>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-cyan-700 uppercase tracking-wider mb-2">Annotated image</p>
+              <div id="previewWrap" class="rounded-xl border border-cyan-200/60 overflow-hidden bg-cyan-50/50">
+                <img id="previewImg" alt="Annotated result" class="w-full h-auto max-h-72 object-contain" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-cyan-200/60 bg-cyan-50/70 py-4 mt-auto backdrop-blur-sm">
+      <div class="max-w-3xl mx-auto px-4 text-center text-xs text-slate-600">
+        Pinpoint · Find items in photos with spatial guidance · <a href="/docs" class="text-cyan-600 hover:text-cyan-800 font-medium">API docs</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+
+    var dropzone = document.getElementById('dropzone');
+    var fileInput = document.getElementById('fileInput');
+    var targetInput = document.getElementById('targetInput');
+    var confSlider = document.getElementById('confSlider');
+    var confValue = document.getElementById('confValue');
+    var detectBtn = document.getElementById('detectBtn');
+    var errorBox = document.getElementById('errorBox');
+    var resultsSection = document.getElementById('resultsSection');
+    var topLabel = document.getElementById('topLabel');
+    var directionString = document.getElementById('directionString');
+    var topConf = document.getElementById('topConf');
+    var latencyBadge = document.getElementById('latencyBadge');
+    var allDetections = document.getElementById('allDetections');
+    var previewImg = document.getElementById('previewImg');
+    var detectableTags = document.getElementById('detectableTags');
+    var toggleClassesBtn = document.getElementById('toggleClassesBtn');
+    var toggleClassesLabel = document.getElementById('toggleClassesLabel');
+
+    var selectedFile = null;
+    var cameraStream = null;
+    // COCO 80 classes (YOLO order) for "Show all 80" toggle
+    var COCO_CLASSES = ['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign','parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie','suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle','wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven','toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
+    var showingAllClasses = false;
+
+    const cameraModal = document.getElementById('cameraModal');
+    const cameraVideo = document.getElementById('cameraVideo');
+    const takePhotoBtn = document.getElementById('takePhotoBtn');
+    const cameraCancelBtn = document.getElementById('cameraCancelBtn');
+    const cameraCancelBtn2 = document.getElementById('cameraCancelBtn2');
+    const cameraCaptureBtn = document.getElementById('cameraCaptureBtn');
+
+    function bindTagClicks() {
+      var tags = document.querySelectorAll('#detectableTags .detectable-tag');
+      for (var i = 0; i < tags.length; i++) {
+        tags[i].onclick = function () {
+          var cls = this.getAttribute('data-class');
+          if (cls && targetInput) {
+            targetInput.value = cls;
+            targetInput.focus();
+          }
+        };
+      }
+    }
+
+    function renderDetectableTags(showAll) {
+      if (!detectableTags) return;
+      showingAllClasses = showAll;
+      var toShow = showAll ? COCO_CLASSES : COCO_CLASSES.slice(0, 28);
+      var html = '';
+      for (var i = 0; i < toShow.length; i++) {
+        var c = toShow[i];
+        html += '<span class="detectable-tag inline-block px-2.5 py-1.5 rounded-lg bg-cyan-100 text-cyan-800 cursor-pointer" data-class="' + c + '" title="Click to use as target">' + c + '</span>';
+      }
+      detectableTags.innerHTML = html;
+      if (toggleClassesLabel) toggleClassesLabel.textContent = showAll ? 'Show less' : 'Show all 80';
+      bindTagClicks();
+    }
+
+    if (detectableTags) bindTagClicks();
+
+    if (toggleClassesBtn) toggleClassesBtn.addEventListener('click', function () {
+      renderDetectableTags(!showingAllClasses);
+    });
+
+    function closeCamera() {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(function (t) { t.stop(); });
+        cameraStream = null;
+      }
+      if (cameraModal) cameraModal.classList.add('hidden');
+    }
+
+    // --- Dropzone and file input first so they always work ---
+    if (dropzone && fileInput) {
+      dropzone.addEventListener('click', function (e) {
+        if (e.target.closest('#takePhotoBtn')) return;
+        e.preventDefault();
+        fileInput.click();
+      });
+      dropzone.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        dropzone.setAttribute('data-dragover', 'true');
+      });
+      dropzone.addEventListener('dragleave', function () {
+        dropzone.setAttribute('data-dragover', 'false');
+      });
+      dropzone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        dropzone.setAttribute('data-dragover', 'false');
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f && f.type.indexOf('image/') === 0) {
+          selectedFile = f;
+          if (detectBtn) detectBtn.disabled = false;
+          hideError();
+        }
+      });
+    }
+
+    if (fileInput) {
+      fileInput.addEventListener('change', function () {
+        var f = fileInput.files && fileInput.files[0];
+        if (f) {
+          selectedFile = f;
+          if (detectBtn) detectBtn.disabled = false;
+          hideError();
+        }
+      });
+    }
+
+    // --- Take photo and camera modal ---
+    if (takePhotoBtn && cameraModal && cameraVideo) {
+      takePhotoBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+          .then(function (stream) {
+            cameraStream = stream;
+            cameraVideo.srcObject = stream;
+            cameraModal.classList.remove('hidden');
+          })
+          .catch(function (err) {
+            showError('Could not access camera: ' + (err.message || 'Permission denied'));
+          });
+      });
+    }
+
+    if (cameraCancelBtn) cameraCancelBtn.addEventListener('click', closeCamera);
+    if (cameraCancelBtn2) cameraCancelBtn2.addEventListener('click', closeCamera);
+
+    if (cameraCaptureBtn && cameraVideo) {
+      cameraCaptureBtn.addEventListener('click', function () {
+        var canvas = document.createElement('canvas');
+        canvas.width = cameraVideo.videoWidth;
+        canvas.height = cameraVideo.videoHeight;
+        canvas.getContext('2d').drawImage(cameraVideo, 0, 0);
+        canvas.toBlob(function (blob) {
+          if (!blob) return;
+          selectedFile = new File([blob], 'camera.png', { type: 'image/png' });
+          if (detectBtn) detectBtn.disabled = false;
+          hideError();
+          closeCamera();
+        }, 'image/png');
+      });
+    }
+
+    if (confSlider && confValue) {
+      confSlider.addEventListener('input', function () {
+        confValue.textContent = parseFloat(confSlider.value).toFixed(2);
+      });
+    }
+
+    function hideError() {
+      if (errorBox) errorBox.classList.add('hidden');
+    }
+    function showError(msg) {
+      if (errorBox) { errorBox.textContent = msg; errorBox.classList.remove('hidden'); }
+    }
+
+    if (detectBtn) detectBtn.addEventListener('click', async function () {
+      if (!selectedFile) return;
+      hideError();
+      detectBtn.disabled = true;
+
+      var formData = new FormData();
+      formData.append('file', selectedFile);
+      var conf = confSlider.value;
+      var target = targetInput.value.trim() || undefined;
+      var params = new URLSearchParams();
+      if (conf) params.set('conf', conf);
+      if (target) params.set('target', target);
+      params.set('include_annotated', 'true');
+
+      var url = '/detect?' + params.toString();
+      try {
+        var res = await fetch(url, { method: 'POST', body: formData });
+        var data = await res.json();
+
+        if (!res.ok) {
+          showError(data.detail || res.statusText || 'Request failed');
+          detectBtn.disabled = false;
+          return;
+        }
+
+        resultsSection.classList.remove('hidden');
+        latencyBadge.textContent = (data.inference_latency_ms ?? 0).toFixed(0) + ' ms';
+
+        var dets = data.detections || [];
+        if (dets.length > 0) {
+          var top = dets[0];
+          topLabel.textContent = top.label;
+          directionString.textContent = top.spatial && top.spatial.direction_string ? top.spatial.direction_string : '—';
+          topConf.textContent = 'Confidence: ' + (top.confidence * 100).toFixed(1) + '%';
+          allDetections.innerHTML = dets.slice(0, 12).map(function (d, i) {
+            return '<div class="flex justify-between gap-2"><span>' + (i + 1) + '. ' + d.label + '</span><span class="tabular-nums text-surface-500">' + (d.confidence * 100).toFixed(0) + '%</span></div>';
+          }).join('');
+        } else {
+          topLabel.textContent = data.target_requested ? 'No match' : 'No detections';
+          directionString.textContent = data.target_requested
+            ? 'No "' + data.target_requested + '" found in this image.'
+            : 'Try lowering the confidence threshold.';
+          topConf.textContent = '—';
+          allDetections.innerHTML = '';
+        }
+
+        var hint = document.getElementById('noMatchHint');
+        var classesList = document.getElementById('classesList');
+        if (data.target_requested && dets.length === 0) {
+          hint.classList.remove('hidden');
+          document.getElementById('noMatchHintText').textContent =
+            '"' + data.target_requested + '" is not one of the 80 COCO classes we detect. Use a label from the list above or leave target empty.';
+          classesList.classList.add('hidden');
+        } else {
+          hint.classList.add('hidden');
+        }
+
+        if (data.annotated_image_b64) {
+          previewImg.src = 'data:image/png;base64,' + data.annotated_image_b64;
+          previewImg.classList.remove('hidden');
+        } else {
+          previewImg.classList.add('hidden');
+        }
+
+        document.getElementById('showClassesBtn').onclick = async function () {
+          var listEl = document.getElementById('classesList');
+          if (listEl.classList.contains('hidden')) {
+            try {
+              var r = await fetch('/classes');
+              var d = await r.json();
+              listEl.textContent = (d.classes || []).join(', ');
+              listEl.classList.remove('hidden');
+            } catch (_) {
+              listEl.textContent = 'Could not load list.';
+              listEl.classList.remove('hidden');
+            }
+          } else {
+            listEl.classList.add('hidden');
+          }
+        };
+      } catch (err) {
+        showError(err.message || 'Network error');
+      }
+      detectBtn.disabled = false;
+    });
+
+    });
+  </script>
+</body>
+</html>
