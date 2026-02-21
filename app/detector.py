@@ -14,6 +14,7 @@ from app.config import (
     CONF_THRESHOLD,
     get_imgsz,
     get_max_dim,
+    get_model_name,
     get_preset_name,
     resolve_device,
 )
@@ -46,8 +47,8 @@ def get_model() -> YOLO:
     """Load YOLO model once (singleton) on the resolved device."""
     global _model
     if _model is None:
-        model_name = os.environ.get("MODEL_NAME", "yolov8n.pt")
         device = _get_device()
+        model_name = get_model_name(device)
         logger.info("Loading YOLO model: %s on device=%s", model_name, device)
         _model = YOLO(model_name)
         logger.info("Model loaded | device=%s | preset=%s", device, get_preset_name(device))
@@ -101,9 +102,9 @@ def run_detection(
     max_dim = get_max_dim(device)
     half = device == "cuda"
 
-    # Preprocess: downscale if over max_dim
+    # Preprocess: downscale only when max_dim > 0 (GPU default 0 = no downscale)
     t_pre = time.perf_counter()
-    if max(image_bgr.shape[:2]) > max_dim:
+    if max_dim > 0 and max(image_bgr.shape[:2]) > max_dim:
         image_bgr = resize_to_max_dim(image_bgr, max_dim)
     preprocess_ms = (time.perf_counter() - t_pre) * 1000.0
 

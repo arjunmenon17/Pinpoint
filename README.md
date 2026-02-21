@@ -125,8 +125,13 @@ curl -X POST "http://localhost:8000/detect?annotate=0" \
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MODEL_NAME` | `yolov8n.pt` | YOLO weights (Ultralytics will download on first use). |
+| `MODEL_DEVICE` | `auto` | `auto` (cuda if available, else cpu), `cpu`, or `cuda`. |
+| `MODEL_NAME` | `yolov8n.pt` | YOLO weights used when running on **CPU**. |
+| `GPU_MODEL_NAME` | `yolov8x.pt` | YOLO weights used when running on **GPU** (local: best model, no downscale). |
+| `GPU_IMG_SIZE` | `1280` | Inference size on GPU. `GPU_MAX_DIM` = `0` (no resize) by default for full quality. |
+| `CPU_IMG_SIZE` | `640` | Inference size on CPU. `CPU_MAX_DIM` = `1280` to keep inference fast. |
 | `CONF_THRESHOLD` | `0.25` | Default confidence threshold (overridable by query `conf`). |
+| `MAX_UPLOAD_MB` | `8` | Max upload size in MB. |
 
 ## Tests
 

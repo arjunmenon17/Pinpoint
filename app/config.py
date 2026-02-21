@@ -22,12 +22,14 @@ def _env_float(key: str, default: float) -> float:
 # Device: auto | cpu | cuda
 MODEL_DEVICE_RAW: str = os.environ.get("MODEL_DEVICE", "auto").strip().lower()
 MODEL_NAME: str = os.environ.get("MODEL_NAME", "yolov8n.pt").strip()
+# GPU (local): best model by default; CPU (deploy): lightweight
+GPU_MODEL_NAME: str = os.environ.get("GPU_MODEL_NAME", "yolov8x.pt").strip()
 CPU_IMG_SIZE: int = _env_int("CPU_IMG_SIZE", 640)
-GPU_IMG_SIZE: int = _env_int("GPU_IMG_SIZE", 960)
+GPU_IMG_SIZE: int = _env_int("GPU_IMG_SIZE", 1280)
 CONF_THRESHOLD: float = _env_float("CONF_THRESHOLD", 0.25)
 MAX_UPLOAD_MB: int = max(1, min(50, _env_int("MAX_UPLOAD_MB", 8)))
-# Max dimension before downscale (GPU: avoid OOM, CPU: keep fast)
-GPU_MAX_DIM: int = _env_int("GPU_MAX_DIM", 1920)
+# Max dimension before downscale. GPU: 0 = no cap (full quality); CPU: keep fast
+GPU_MAX_DIM: int = _env_int("GPU_MAX_DIM", 0)
 CPU_MAX_DIM: int = _env_int("CPU_MAX_DIM", 1280)
 
 # Resolved device after probe
@@ -62,6 +64,11 @@ def resolve_device() -> str:
         pass
     _resolved_device = "cpu"
     return _resolved_device
+
+
+def get_model_name(device: str) -> str:
+    """Model file to load: best (x) for GPU, lightweight (n) for CPU unless overridden."""
+    return GPU_MODEL_NAME if device == "cuda" else MODEL_NAME
 
 
 def get_imgsz(device: str) -> int:

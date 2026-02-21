@@ -11,7 +11,7 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.config import get_imgsz, get_preset_name
+from app.config import get_imgsz, get_model_name, get_preset_name
 from app.detector import get_device, get_model, run_detection, warmup
 from app.schemas import DetectResponse, TimingBreakdown
 from app.utils import (
@@ -199,7 +199,7 @@ async def health():
         return {
             "status": "ok",
             "device": device,
-            "model": os.environ.get("MODEL_NAME", "yolov8n.pt"),
+            "model": get_model_name(get_device()),
             "preset": preset,
         }
     except Exception as e:
