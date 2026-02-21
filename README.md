@@ -1,0 +1,140 @@
+# Pinpoint
+
+**Pinpoint** is a low-latency assistive object-localization web API that helps you find an item in an image or webcam frame by detecting objects and returning interpretable spatial guidance (e.g., *"keys are bottom-left"*).
+
+- **Who it's for:** Everyday users who misplace small items (keys, wallet, phone, remote) and want quick, explainable location guidance from a photo or webcam. Also built to demonstrate production ML systems skills.
+- **Stack:** Python 3.11, Ultralytics YOLOv8 (CPU), OpenCV, FastAPI, single-page Tailwind UI.
+
+## Architecture overview
+
+```
+┌─────────────┐     POST /detect      ┌──────────────┐     ┌─────────────┐
+│  Browser    │ ───────────────────► │  FastAPI     │ ──► │  YOLOv8n    │
+│  (static)   │   multipart image    │  app/main    │     │  detector   │
+└─────────────┘                      └──────┬───────┘     └──────┬──────┘
+       ▲                                    │                    │
+       │ JSON + base64 annotated image      │                    ▼
+       │ inference_latency_ms               │             ┌─────────────┐
+       └───────────────────────────────────┘             │  spatial     │
+                                                         │  (regions,   │
+                                                         │   direction) │
+                                                         └─────────────┘
+```
+
+- **app/main.py** – FastAPI app, `POST /detect`, file validation, static serve.
+- **app/detector.py** – YOLO model singleton, inference, selection (target / top-k / all).
+- **app/spatial.py** – Region (thirds), normalized offset from center, natural-language direction, distance heuristic.
+- **app/utils.py** – Image decode/encode, validation, bounding-box drawing.
+- **app/schemas.py** – Pydantic request/response models.
+
+## Endpoint documentation
+
+### `POST /detect`
+
+Detect objects in an image and return detections with spatial guidance.
+
+| Item | Description |
+|------|-------------|
+| **Request** | `multipart/form-data` with `file` = image (JPG, PNG, WebP, BMP; max 10 MB). |
+| **Query params** | `target` (optional): class label to filter (e.g. `cell phone`). `conf` (optional): confidence threshold 0–1. `top_k` (optional): max detections when target is set (default 5). `include_annotated` (optional): include base64 PNG (default true). |
+| **Response** | JSON: `detections` (list with `label`, `confidence`, `bbox`, `spatial`), `inference_latency_ms`, `annotated_image_b64`, `target_requested`, `image_width`, `image_height`. |
+
+**Selection logic:**
+
+- If `target` is provided: return up to `top_k` detections of that class (highest confidence first).
+- If no target: return all detections above confidence threshold, sorted by confidence.
+- If target requested but none found: 200 with empty `detections` and optional annotated image.
+
+### `GET /`
+
+Serves the demo UI (single-page at `static/index.html`).
+
+### `GET /health`
+
+Health check; returns `{"status": "ok"}`.
+
+## Run locally
+
+**Prerequisites:** Python 3.11, pip.
+
+```bash
+# Clone and enter repo
+cd Pinpoint
+
+# Create venv (recommended)
+python -m venv .venv
+.venv\Scripts\activate   # Windows
+# source .venv/bin/activate  # Linux/macOS
+
+# Install
+pip install -r requirements.txt
+
+# Optional env
+set MODEL_NAME=yolov8n.pt
+set CONF_THRESHOLD=0.25
+
+# Run (first run downloads YOLO weights)
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Open **http://localhost:8000** for the demo UI, or **http://localhost:8000/docs** for Swagger.
+
+## Run with Docker
+
+CPU-only image:
+
+```bash
+# Build
+docker build -t pinpoint .
+
+# Run (port 8000)
+docker run -p 8000:8000 pinpoint
+```
+
+Optional env:
+
+```bash
+docker run -p 8000:8000 -e CONF_THRESHOLD=0.3 pinpoint
+```
+
+## Example curl requests
+
+**Detect all objects (no target):**
+
+```bash
+curl -X POST "http://localhost:8000/detect?conf=0.25" \
+  -F "file=@/path/to/photo.jpg"
+```
+
+**Detect only “cell phone”:**
+
+```bash
+curl -X POST "http://localhost:8000/detect?target=cell%20phone&conf=0.3" \
+  -F "file=@/path/to/photo.jpg"
+```
+
+**Without annotated image:**
+
+```bash
+curl -X POST "http://localhost:8000/detect?include_annotated=false" \
+  -F "file=@/path/to/photo.jpg"
+```
+
+## Configuration (environment)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MODEL_NAME` | `yolov8n.pt` | YOLO weights (Ultralytics will download on first use). |
+| `CONF_THRESHOLD` | `0.25` | Default confidence threshold (overridable by query `conf`). |
+
+## Tests
+
+```bash
+pytest tests/ -v
+```
+
+Spatial logic is covered in `tests/test_spatial.py` (regions, offsets, direction strings, distance labels).
+
+## License
+
+Use and modify as needed for portfolio and interviews.
